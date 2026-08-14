@@ -128,6 +128,10 @@ python main.py
 
 Run it inside a scheduled task (set "Run whether user is logged on or not") or simply leave it running.
 
+### On Render (free cloud hosting)
+
+The bot deploys to [Render](https://render.com) as a web service — one click from GitHub. The repo ships a `render.yaml` Blueprint plus a health endpoint (`GET /`) so Render can route traffic and free cron pings can keep the service awake. Full step-by-step instructions: [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md). Note that Render's **free plan sleeps the service after ~15 min of idle HTTP traffic**, so a free ping cron (cron-job.org / uptimerobot) is recommended — or the $7/mo Starter plan for always-on.
+
 ### Note on YouTube downloads
 
 Some networks trigger YouTube's bot detection ("Sign in to confirm you're not a bot") and downloads fail. Two easy fixes:

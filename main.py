@@ -46,7 +46,18 @@ def load_auth(config: dict):
     """
     Load stored auth token, or guide the user through first-time setup.
     Tokens are stored in ./auth_token.json after first login.
+
+    Render / env-first: if USER_ID + USER_TOKEN are set as environment
+    variables (Render's preferred pattern for stateless deploys), they are
+    used directly — no disk file needed.
     """
+    env_uid = os.environ.get("USER_ID")
+    env_token = os.environ.get("USER_TOKEN")
+    if env_uid and env_token:
+        logger.info("Using auth from environment variables (Render-ready).")
+        return {"user_id": env_uid, "user_token": env_token,
+                "device_id": os.environ.get("DEVICE_ID", "")}
+
     token_file = config.get("auth_token_file", "./auth_token.json")
 
     if os.path.isfile(token_file):
@@ -107,6 +118,9 @@ def main():
     # ------------------------------------------------------------------
     scheduler = Scheduler(config, queue_manager=queue)
     if not args.demo:
+        # On Render, sleep after 15 min of inactivity is only avoided via
+        # external pings to the health endpoint; the scheduler itself can
+        # run regardless.
         scheduler.start()
 
     # ------------------------------------------------------------------
@@ -182,6 +196,13 @@ def main():
     running = threading.Event()
     running.set()
 
+    # Render compatibility: health endpoint (Render requires the service to
+    # bind PORT for routing; free tier also needs external pings to stay
+    # awake — see docs/DEPLOY_RENDER.md)
+    _start_health_server(
+        running, player, int(os.environ.get("PORT", 10000))
+    )
+
     def shutdown(signum=None, frame=None):
         logger.info("Shutting down...")
         running.clear()
@@ -237,6 +258,50 @@ def main():
         time.sleep(watchdog_interval)
 
     shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Render compatibility — lightweight HTTP health endpoint
+# Render's free plan puts web services to sleep after ~15 minutes of
+# inactivity. We respond to pings on PORT (default 10000) so a free cron
+# job (e.g., cron-job.org, uptimerobot.com, Uptime Kuma) can keep the bot
+# awake. If the port is already in use, health checking is simply disabled.
+# ---------------------------------------------------------------------------
+
+_health_app = None
+
+
+def _start_health_server(running_event: threading.Event,
+                         audio_player: "AudioPlayer",
+                         port: int = 10000) -> None:
+    """Start the health HTTP server in a daemon thread (best effort)."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass  # quiet
+
+        def do_GET(self):
+            status = "OK" if running_event.is_set() else "STOPPING"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps({"status": status,
+                            "service": "ClubDJ",
+                            "playing": audio_player.is_playing}).encode()
+            )
+
+    try:
+        app = HTTPServer(("0.0.0.0", port), HealthHandler)
+        t = threading.Thread(target=app.serve_forever,
+                             daemon=True, name="health-server")
+        t.start()
+        logger.info(f"Health endpoint listening on :{port}")
+    except OSError as exc:
+        logger.warning(f"Health server not started ({exc}) — "
+                       "set PORT or free the port to enable ping-based "
+                       "keepalive for Render.")
 
 
 if __name__ == "__main__":

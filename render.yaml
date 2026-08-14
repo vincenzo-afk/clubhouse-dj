@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: clubdj-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt && mkdir -p playlist/cache playlist/tts_cache logs
+    startCommand: python3 main.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: RENDER
+        value: "1"
+      # Clubhouse auth — fill these after running `python3 auth_setup.py` locally
+      # and copying the values from auth_token.json:
+      # - key: USER_ID    value: <from auth_token.json>
+      # - key: USER_TOKEN value: <from auth_token.json>
+      # - key: DEVICE_ID  value: <from auth_token.json>
+    healthCheckPath: /
+    plan: free
