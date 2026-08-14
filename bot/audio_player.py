@@ -3,6 +3,7 @@ audio_player.py — Downloads audio via yt-dlp, converts with ffmpeg,
 and streams into an Agora RTC room as a custom PCM audio source.
 """
 
+import glob
 import os
 import time
 import hashlib
@@ -150,16 +151,18 @@ class AudioPlayer:
         else:
             yt_query = f"ytsearch1:{query}"
 
-        raw_path = wav_path.replace(".wav", ".raw_download")
+        raw_path = wav_path.replace(".wav", ".raw_download_%(id)s.%(ext)s")
 
         _log(f"Downloading: {yt_query}")
 
-        # Step 1 — yt-dlp download best audio
-        ytdlp_cmd = [
+        # Step 1 — yt-dlp download best audio.
+        # Uses a template with %(id)s so the written filename is predictable,
+        # and --playlist-end 1 to avoid accidentally downloading playlists.
+        ytdlp_base = [
             "yt-dlp",
             "--no-playlist",
+            "--playlist-end", "1",
             "--max-filesize", "50m",
-            "--match-filter", f"duration < {self.max_duration}",
             "-f", "bestaudio/best",
             "-o", raw_path,
             "--quiet",
@@ -167,32 +170,58 @@ class AudioPlayer:
             yt_query,
         ]
 
-        try:
-            result = subprocess.run(
-                ytdlp_cmd, capture_output=True, text=True, timeout=120
-            )
-            if result.returncode != 0:
-                _log(f"yt-dlp error: {result.stderr.strip()}")
+        attempts = [f"duration < {self.max_duration}", None]
+        for attempt, match_filter in enumerate(attempts):
+            cmd = ytdlp_base[:]
+            if match_filter:
+                cmd.insert(-2, "--match-filter")
+                cmd.insert(-2, match_filter)
+            try:
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=120
+                )
+                # NOTE: yt-dlp exits 0 even when the match-filter rejects
+                # every result ("does not pass filter ... skipping"), so we
+                # verify a file was actually written before declaring success.
+                template_prefix = raw_path.split("%(")[0]
+                if result.returncode == 0 and glob.glob(
+                    f"{template_prefix}*"
+                ):
+                    break
+                if result.returncode != 0:
+                    err = (result.stderr or "no output").strip()
+                    _log(f"yt-dlp attempt {attempt + 1} error: {err}")
+                    if "bot" in err or "Sign in" in err or "consent" in err:
+                        _log(
+                            "YouTube is blocking automated downloads from "
+                            "this network. Pass cookies (see README) or use "
+                            "non-YouTube sources."
+                        )
+                else:
+                    _log(
+                        "yt-dlp completed but no file was saved "
+                        "(track may have been filtered out)."
+                    )
+            except subprocess.TimeoutExpired:
+                _log("yt-dlp timed out after 120 seconds.")
+            except FileNotFoundError:
+                _log("yt-dlp not found. Install it: pip install yt-dlp")
                 return None
-        except subprocess.TimeoutExpired:
-            _log("yt-dlp timed out after 120 seconds.")
-            return None
-        except FileNotFoundError:
-            _log("yt-dlp not found. Install it: pip install yt-dlp")
-            return None
 
-        # Locate whatever file yt-dlp wrote (extension may vary)
+        # Locate whatever file yt-dlp wrote (template may vary by extractor).
+        # Exclude any stale file that existed before this run by matching the
+        # exact template prefix (files are keyed by query hash, so a hit here
+        # is unambiguous).
         actual_raw = None
-        for f in os.listdir(self.cache_dir):
-            candidate = os.path.join(self.cache_dir, f)
-            if candidate.startswith(raw_path.rstrip("x")):
+        template_prefix = raw_path.split("%(")[0]
+        for candidate in glob.glob(f"{template_prefix}*"):
+            if os.path.isfile(candidate):
                 actual_raw = candidate
                 break
         if not actual_raw:
-            # yt-dlp wrote exactly raw_path or with extension
             for ext in ["", ".webm", ".m4a", ".opus", ".mp3", ".ogg"]:
-                if os.path.isfile(raw_path + ext):
-                    actual_raw = raw_path + ext
+                if os.path.isfile(raw_path.split("%(")[0].rstrip(".") + ext):
+                    actual_raw = raw_path.split("%(")[0].rstrip(".") + ext
                     break
 
         if not actual_raw or not os.path.isfile(actual_raw):

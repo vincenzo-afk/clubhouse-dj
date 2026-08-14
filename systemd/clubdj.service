@@ -1,0 +1,18 @@
+[Unit]
+Description=ClubDJ Bot for Clubhouse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=__INSTALL_DIR__
+# Start in normal mode; remove "--demo" for the real bot
+ExecStart=__INSTALL_DIR__/venv/bin/python __INSTALL_DIR__/main.py
+Restart=always
+RestartSec=10
+# If the bot needs a display/audio server this is NOT required (headless)
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,8 @@ converts them to 16 kHz mono WAV, and injects them into the Agora audio stream
 before each song starts.
 """
 
+from __future__ import annotations
+
 import os
 import hashlib
 import subprocess

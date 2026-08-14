@@ -2,6 +2,8 @@
 queue_manager.py — FIFO song queue with auto-DJ fallback from default_songs.txt.
 """
 
+from __future__ import annotations
+
 import os
 import random
 import threading

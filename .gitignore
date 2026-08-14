@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Bot runtime data
+playlist/cache/
+playlist/tts_cache/
+logs/
+auth_token.json
+cookies.txt
+clubdj.pid
+*.pid
+
+# OS
+.DS_Store
