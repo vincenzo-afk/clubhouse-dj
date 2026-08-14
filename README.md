@@ -48,13 +48,36 @@ python3 main.py --demo
 
 ## Authentication
 
-ClubDJ logs into Clubhouse using a token from a real Clubhouse account. This is done once and saved to `auth_token.json`.
+ClubDJ logs into Clubhouse using a token from a real Clubhouse account. This is done once and saved to `auth_token.json` (or, on Render, via `USER_ID` / `USER_TOKEN` / `DEVICE_ID` environment variables).
+
+### Method 1 — Phone OTP (recommended when SMS delivery works)
 
 1. Set your phone number in `config.json` (`phone_number`).
 2. Run `python3 auth_setup.py` and follow the instructions (OTP verification).
 3. The script saves `{ "user_id", "user_token", "device_id" }` to `auth_token.json` automatically.
 
-**Important:** the bot will appear in rooms under *your* Clubhouse account. If your account session is invalidated (password change, logout), re-run `auth_setup.py`.
+> **Note on SMS:** Clubhouse's phone auth sometimes fails to deliver the SMS OTP in certain regions/carriers (a known, widespread issue — the API request itself succeeds but the text never arrives). If you never receive the code, use Method 2.
+
+### Method 2 — Extract the token from your logged-in app session (most reliable)
+
+Log into Clubhouse on your phone normally (the app supports **Google sign-in**, which needs no SMS):
+
+1. Open the Clubhouse app → sign in (phone OTP or **Google sign-in** — Google login avoids SMS entirely).
+2. Once logged in, capture the auth token from the app's network traffic:
+   - **Android:** use a packet-capture/HTTP-debug tool (e.g., *Packet Capture*, *HttpCanary*, or *mitmproxy*). Start capturing, use the app, then open any request to `www.clubhouseapi.com` and copy the `CH-Auth` header value (`Token eyJhbGci...`) plus the `CH-DeviceId` header.
+   - **Any device:** log into the **Clubhouse web version** (clubhouse.com) in a desktop browser, open DevTools → Network, make an API call (visit your profile), and read the `CH-Auth` / `Authorization` request header.
+3. From the same request's **response body**, find your numeric `user_id`.
+4. Save them to `auth_token.json`:
+
+```json
+{
+  "user_id": "YOUR_USER_ID",
+  "user_token": "Token eyJhbGci...",
+  "device_id": "YOUR-DEVICE-UUID"
+}
+```
+
+**Important:** the bot will appear in rooms under *your* Clubhouse account. If your account session is invalidated (logout, reinstall), re-capture the token and update the file (or the Render env vars).
 
 ---
 
