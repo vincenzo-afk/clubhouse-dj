@@ -26,21 +26,50 @@ echo "[$(date +%T)] Creating Python virtual environment..."
 python -m venv venv
 source venv/bin/activate
 
-# webrtcvad often fails to build on Termux (no C compiler) — install what works
+# Install dependencies — one package per line so failures are visible.
 echo "[$(date +%T)] Installing Python dependencies (this may take 3-5 minutes)..."
-pip install -q --upgrade pip
-# clubhouse-py deps + pubnub + audio pipeline; skip heavy compile-only ones
-pip install -q \
-  clubhouse-py pubnub requests gTTS pyttsx3 \
-  yt-dlp "pydub>=0.25" playsound==1.3.0 \
-  pydub apscheduler > /dev/null 2>&1 || true
+pip install --upgrade pip 2>&1 | tail -1
 
-# Fallback: install whatever remains missing one by one
-for pkg in webrtcvad; do
-  if ! python -c "import $pkg" 2>/dev/null; then
-    pip install -q "$pkg" 2>/dev/null || echo -e "${YELLOW}[warn] $pkg could not compile (non-fatal — silence detection will use RMS-only mode)${NC}"
+PIP_PACKAGES=(
+  clubhouse-py
+  pubnub
+  requests
+  gTTS
+  pyttsx3
+  yt-dlp
+  "pydub>=0.25"
+  apscheduler
+)
+
+FAILED=0
+for pkg in "${PIP_PACKAGES[@]}"; do
+  if python -c "import ${pkg%%[>=]*}" 2>/dev/null; then
+    echo "  OK   $pkg (already installed)"
+    continue
+  fi
+  echo -n "  installing $pkg ... "
+  if pip install -q "$pkg" > /tmp/clubdj_pip_$RANDOM.log 2>&1; then
+    echo "OK"
+  else
+    echo "FAILED (see /tmp/clubdj_pip_*.log)"
+    FAILED=1
   fi
 done
+
+# webrtcvad often fails to build on Termux (no C compiler) — non-fatal
+if ! python -c "import webrtcvad" 2>/dev/null; then
+  echo -n "  installing webrtcvad ... "
+  pip install -q webrtcvad > /dev/null 2>&1 && echo "OK" || \
+    echo -e "${YELLOW}skipped (non-fatal — silence detection uses RMS-only mode)${NC}"
+fi
+
+if [ "$FAILED" -ne 0 ]; then
+  echo ""
+  echo -e "${RED}[error] Some packages failed to install.${NC}"
+  echo "Try installing the missing ones manually: pip install <package>"
+  echo "If a package fails with a compiler error, tell us the error and we'll find a workaround."
+  exit 1
+fi
 
 # 4. espeak-ng for pyttsx3 fallback TTS
 command -v espeak > /dev/null 2>&1 || pkg install -y espeak-ng > /dev/null 2>&1 || true
