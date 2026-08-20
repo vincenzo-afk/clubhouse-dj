@@ -1,7 +1,7 @@
 clubhouse-py==434.0.1
 yt-dlp>=2024.3.10
 pydub==0.25.1
-pyaudioop-lts>=3.20.0
+audioop-lts>=0.2.1
 gTTS>=2.5.1
 pyttsx3==2.90
 APScheduler==3.10.4
