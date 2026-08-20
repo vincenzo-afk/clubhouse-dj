@@ -151,6 +151,23 @@ python main.py
 
 Run it inside a scheduled task (set "Run whether user is logged on or not") or simply leave it running.
 
+### On your Android phone (Termux — free, runs entirely on-device)
+
+The bot runs directly on your Android phone via [Termux](https://termux.dev) (install from F-Droid or the [GitHub releases](https://github.com/termux/termux-app/releases), not the Play Store). Full step-by-step guide: [docs/DEPLOY_MOBILE.md](docs/DEPLOY_MOBILE.md).
+
+```bash
+# After installing Termux:
+termux-setup-storage
+pkg install -y git
+git clone https://github.com/vincenzo-afk/clubhouse-dj.git
+cd clubhouse-dj
+chmod +x install_termux.sh run_termux.sh
+./install_termux.sh          # installs python, ffmpeg, yt-dlp, deps
+./run_termux.sh tmux         # runs the bot inside tmux (survives closing Termux)
+```
+
+Important: enable **Unrestricted** battery mode for Termux (Settings → Apps → Termux → Battery), tap **Acquire wakelock** in the Termux notification, and enable auto-start on Vivo/iQOO phones — otherwise Android kills the bot when the screen is off.
+
 ### On Render (free cloud hosting)
 
 The bot deploys to [Render](https://render.com) as a web service — one click from GitHub. The repo ships a `render.yaml` Blueprint plus a health endpoint (`GET /`) so Render can route traffic and free cron pings can keep the service awake. Full step-by-step instructions: [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md). Note that Render's **free plan sleeps the service after ~15 min of idle HTTP traffic**, so a free ping cron (cron-job.org / uptimerobot) is recommended — or the $7/mo Starter plan for always-on.
