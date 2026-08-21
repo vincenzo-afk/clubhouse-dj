@@ -1,229 +1,273 @@
-# ClubDJ Bot for Clubhouse
+# <a name="header"></a>ClubDJ — Your Room's Personal Clubhouse DJ
 
-An automated music DJ bot for Clubhouse rooms. It joins a room, accepts song requests through chat commands, streams music continuously, makes text-to-speech announcements, and runs an Auto DJ that keeps the room alive when the queue is empty.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Termux Supported](https://img.shields.io/badge/platform-Android%20(Termux)-green.svg)](docs/DEPLOY_MOBILE.md)
+[![Render Deploy](https://img.shields.io/badge/deploy-Render-blue.svg)](docs/DEPLOY_RENDER.md)
 
-**Features**
+Non-stop beats, smooth transitions, and instant song requests—no awkward silence, just pure vibe. Plug in, chill, and let the bot run the party.
 
-| Feature | Description |
-|---|---|
-| Chat commands | `!play`, `!skip`, `!queue`, `!np`, `!timer`, `!stop`, `!start`, `!clear`, `!help` |
-| Song queue | FIFO queue (configurable capacity), plays immediately when nothing is playing |
-| Skip voting | Audience votes to skip (default: 3 votes); moderators skip instantly |
-| Auto DJ | Keeps music going: picks random tracks from the default playlist when the queue is empty or the room goes silent |
-| TTS announcements | Announces each song ("Now playing…") and queue events in a robot voice |
-| Silence detection | RMS-based audio monitor + wall-clock timer; silence threshold is adjustable in-chat (`!timer 15`) |
-| Audio pipeline | yt-dlp downloads audio → ffmpeg converts to 16 kHz mono PCM → streamed to the Clubhouse Agora channel |
-| Keepalive | Active ping loop + automatic reconnect with watchdog |
-| Demo mode | Fully local operation (no Clubhouse account needed) for testing |
+[Demo](#usage) • [Documentation](#getting-started) • [Report Bug](https://github.com/vincenzo-afk/clubhouse-dj/issues) • [Request Feature](https://github.com/vincenzo-afk/clubhouse-dj/issues)
 
 ---
 
-## Quick start
+## <a name="toc"></a>Table of Contents
 
-```bash
-# 1. Install everything (system packages + Python venv + systemd auto-start)
-chmod +x install.sh start.sh
-./install.sh
+1. [About the Project](#about)
+2. [Tech Stack](#tech-stack)
+3. [Getting Started](#getting-started)
+4. [Usage](#usage)
+5. [Project Structure](#structure)
+6. [Features & Roadmap](#features)
+7. [Testing](#testing)
+8. [Deployment](#deployment)
+9. [Contributing](#contributing)
+10. [Security](#security)
+11. [License](#license)
+12. [Acknowledgments](#acknowledgments)
 
-# 2. Configure
-nano config.json            # set phone_number and room_id
+---
 
-# 3. Authenticate (one time)
-python3 auth_setup.py       # stores the token in auth_token.json
+## <a name="about"></a>## About the Project
 
-# 4. Start the bot
-sudo systemctl start clubdj      # auto-starts on boot
-# or, without systemd (macOS / manual):
-./start.sh
-./start.sh --daemon              # background with log + watchdog
+ClubDJ is a production-grade music bot designed specifically for Clubhouse rooms. It solves the problem of "dead air" and manual DJing by providing an automated, request-driven audio pipeline. Whether you're running a 24/7 lofi room or a live talk show, ClubDJ handles the audio so you can focus on the conversation.
+
+### Key Features
+
+*   **🎙️ Chat-Driven DJ:** Users can request songs directly in the room chat using `!play`.
+*   **🤖 Auto DJ Fallback:** Automatically plays from a curated playlist when the queue is empty or the room goes silent.
+*   **🔊 Professional Audio Pipeline:** Uses `yt-dlp` and `ffmpeg` for high-quality audio processing and streaming.
+*   **🗣️ TTS Announcements:** Built-in Text-to-Speech announces new tracks and queue updates.
+*   **⚖️ Democratic Skip System:** 3-vote skip system for the audience, with instant overrides for moderators.
+*   **📱 Mobile-Ready:** Fully optimized to run on Android via Termux for free, portable hosting.
+*   **☁️ Cloud Native:** One-click deployment to Render with built-in health checks.
+
+### Architecture Overview
+
+```mermaid
+graph TD
+    User[Room Member] -->|Chat Command| CH[Clubhouse API]
+    CH -->|PubNub Message| CM[Command Handler]
+    CM -->|Queue Request| QM[Queue Manager]
+    QM -->|Download| DL[yt-dlp Engine]
+    DL -->|Audio Data| AP[Audio Player]
+    AP -->|FFmpeg Stream| AG[Agora Audio Engine]
+    AG -->|Live Audio| CH
+    SD[Silence Detector] -->|Trigger| QM
+    AN[Announcer] -->|TTS| AP
 ```
 
-To try it **without a Clubhouse account** first:
+---
 
+## <a name="tech-stack"></a>## Tech Stack
+
+| Category | Technology |
+|---|---|
+| **Language** | Python 3.10+ |
+| **Clubhouse Integration** | `clubhouse-py`, PubNub SDK |
+| **Audio Processing** | `ffmpeg`, `yt-dlp`, `pydub` |
+| **Streaming** | Agora Audio SDK (via clubhouse-py) |
+| **TTS** | `gTTS`, `pyttsx3` |
+| **Scheduling** | `APScheduler` |
+| **Hosting** | Render, Termux (Android), systemd (Linux) |
+
+---
+
+## <a name="getting-started"></a>## Getting Started
+
+### Prerequisites
+
+*   **Python 3.10+**
+*   **FFmpeg** (installed on your system)
+*   **Clubhouse Account** (Google sign-in recommended for bot accounts)
+
+### Installation
+
+#### Local Development (Linux/macOS)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/vincenzo-afk/clubhouse-dj.git
+cd clubhouse-dj
+
+# 2. Run the universal installer
+chmod +x install.sh
+./install.sh
+
+# 3. Configure your account
+nano config.json
+```
+
+#### Android (Termux)
+
+```bash
+# 1. Setup Termux storage and install git
+termux-setup-storage
+pkg install -y git
+
+# 2. Clone and run mobile installer
+git clone https://github.com/vincenzo-afk/clubhouse-dj.git
+cd clubhouse-dj
+chmod +x install_termux.sh
+./install_termux.sh
+```
+
+### Configuration
+
+The `config.json` file controls all bot behavior:
+
+```json
+{
+  "phone_number": "+91...",      // Your bot account number
+  "room_id": "channel_id",       // The Clubhouse room ID
+  "silence_threshold_minutes": 10,
+  "auto_dj_mode": true,
+  "announce_songs": true,
+  "skip_votes_required": 3
+}
+```
+
+---
+
+## <a name="usage"></a>## Usage
+
+### Authentication
+
+Clubhouse uses a token-based system. Because SMS OTP delivery can be unreliable in some regions, we recommend Method 2:
+
+1.  **Log into the Clubhouse app** on your phone using **Google sign-in**.
+2.  **Capture your token** using a tool like *Packet Capture* (Android) or browser DevTools (Web).
+3.  Copy the `CH-Auth` header value and save it to `auth_token.json`.
+
+### Running the Bot
+
+**Standard Run:**
+```bash
+python3 main.py
+```
+
+**Background (systemd):**
+```bash
+sudo systemctl start clubdj
+```
+
+**Demo Mode (Local test without account):**
 ```bash
 python3 main.py --demo
 ```
 
----
+### Chat Commands
 
-## Authentication
-
-ClubDJ logs into Clubhouse using a token from a real Clubhouse account. This is done once and saved to `auth_token.json` (or, on Render, via `USER_ID` / `USER_TOKEN` / `DEVICE_ID` environment variables).
-
-### Method 1 — Phone OTP (recommended when SMS delivery works)
-
-1. Set your phone number in `config.json` (`phone_number`).
-2. Run `python3 auth_setup.py` and follow the instructions (OTP verification).
-3. The script saves `{ "user_id", "user_token", "device_id" }` to `auth_token.json` automatically.
-
-> **Note on SMS:** Clubhouse's phone auth sometimes fails to deliver the SMS OTP in certain regions/carriers (a known, widespread issue — the API request itself succeeds but the text never arrives). If you never receive the code, use Method 2.
-
-### Method 2 — Extract the token from your logged-in app session (most reliable)
-
-Log into Clubhouse on your phone normally (the app supports **Google sign-in**, which needs no SMS):
-
-1. Open the Clubhouse app → sign in (phone OTP or **Google sign-in** — Google login avoids SMS entirely).
-2. Once logged in, capture the auth token from the app's network traffic:
-   - **Android:** use a packet-capture/HTTP-debug tool (e.g., *Packet Capture*, *HttpCanary*, or *mitmproxy*). Start capturing, use the app, then open any request to `www.clubhouseapi.com` and copy the `CH-Auth` header value (`Token eyJhbGci...`) plus the `CH-DeviceId` header.
-   - **Any device:** log into the **Clubhouse web version** (clubhouse.com) in a desktop browser, open DevTools → Network, make an API call (visit your profile), and read the `CH-Auth` / `Authorization` request header.
-3. From the same request's **response body**, find your numeric `user_id`.
-4. Save them to `auth_token.json`:
-
-```json
-{
-  "user_id": "YOUR_USER_ID",
-  "user_token": "Token eyJhbGci...",
-  "device_id": "YOUR-DEVICE-UUID"
-}
-```
-
-**Important:** the bot will appear in rooms under *your* Clubhouse account. If your account session is invalidated (logout, reinstall), re-capture the token and update the file (or the Render env vars).
-
----
-
-## Configuration (`config.json`)
-
-| Key | Default | Meaning |
-|---|---|---|
-| `phone_number` | — | Your Clubhouse-registered phone number |
-| `room_id` | — | The Clubhouse channel/room ID to join |
-| `silence_threshold_minutes` | `10` | Minutes of silence before Auto DJ kicks in |
-| `auto_dj_mode` | `true` | Enable the Auto DJ fallback |
-| `default_genre` | `"lofi tamil chill"` | Search genre for Auto DJ picks |
-| `max_song_duration_seconds` | `600` | Skip tracks longer than this |
-| `max_queue_size` | `20` | Maximum pending songs |
-| `announce_songs` | `true` | TTS announcement before each song |
-| `skip_votes_required` | `3` | Votes needed for a skip |
-| `bot_name` | `"ClubDJ"` | Display name |
-| `agora_app_id` / `agora_token` / `agora_uid` | — | Only needed for direct audio injection without the room handshake |
-| `reconnect_delay_seconds` / `max_reconnect_attempts` / `watchdog_check_interval` | 5 / 10 / 30 | Reconnection behaviour |
-
-Songs the Auto DJ picks from are defined in `playlist/default_songs.txt` (one search query per line).
-
----
-
-## Chat commands
-
-| Command | Who | Effect |
-|---|---|---|
-| `!play <song or URL>` | everyone | Add to queue; starts immediately if idle |
-| `!skip` | everyone | Vote to skip (3 votes); mods skip instantly |
-| `!queue` | everyone | List pending songs |
-| `!np` | everyone | Announce the current song |
-| `!timer <5–60>` | moderators | Change silence threshold (minutes) |
-| `!stop` / `!start` | moderators | Disable / enable Auto DJ |
-| `!clear` | everyone | Clear the pending queue |
-| `!help` | everyone | Show command list |
-
----
-
-## Hosting — free, on your own machine
-
-The bot is a long-running process, so it needs a machine that stays on. Free options:
-
-### On a Linux server or Raspberry Pi (systemd — auto-start on boot, auto-restart on crash)
-
-```bash
-./install.sh            # creates the `clubdj` systemd service
-sudo systemctl start clubdj
-sudo systemctl enable clubdj   # auto-start on boot
-journalctl -u clubdj -f        # follow the logs
-```
-
-The systemd service restarts the bot automatically on crash (`Restart=always`) and starts it at boot.
-
-### On macOS or any machine without systemd
-
-```bash
-./start.sh --daemon     # background process with log file
-./start.sh --status     # check status
-./start.sh --logs       # tail logs
-```
-
-For persistence across logins, run it inside `tmux`/`screen`, or add it to your platform's startup items.
-
-### On Windows
-
-```powershell
-pip install -r requirements.txt
-python main.py
-```
-
-Run it inside a scheduled task (set "Run whether user is logged on or not") or simply leave it running.
-
-### On your Android phone (Termux — free, runs entirely on-device)
-
-The bot runs directly on your Android phone via [Termux](https://termux.dev) (install from F-Droid or the [GitHub releases](https://github.com/termux/termux-app/releases), not the Play Store). Full step-by-step guide: [docs/DEPLOY_MOBILE.md](docs/DEPLOY_MOBILE.md).
-
-```bash
-# After installing Termux:
-termux-setup-storage
-pkg install -y git
-git clone https://github.com/vincenzo-afk/clubhouse-dj.git
-cd clubhouse-dj
-chmod +x install_termux.sh run_termux.sh
-./install_termux.sh          # installs python, ffmpeg, yt-dlp, deps
-./run_termux.sh tmux         # runs the bot inside tmux (survives closing Termux)
-```
-
-Important: enable **Unrestricted** battery mode for Termux (Settings → Apps → Termux → Battery), tap **Acquire wakelock** in the Termux notification, and enable auto-start on Vivo/iQOO phones — otherwise Android kills the bot when the screen is off.
-
-### On Render (free cloud hosting)
-
-The bot deploys to [Render](https://render.com) as a web service — one click from GitHub. The repo ships a `render.yaml` Blueprint plus a health endpoint (`GET /`) so Render can route traffic and free cron pings can keep the service awake. Full step-by-step instructions: [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md). Note that Render's **free plan sleeps the service after ~15 min of idle HTTP traffic**, so a free ping cron (cron-job.org / uptimerobot) is recommended — or the $7/mo Starter plan for always-on.
-
-### Note on YouTube downloads
-
-Some networks trigger YouTube's bot detection ("Sign in to confirm you're not a bot") and downloads fail. Two easy fixes:
-
-1. Export cookies from your browser (e.g., the *Get cookies.txt LOCALLY* extension) and save them as `cookies.txt` next to `main.py` — yt-dlp picks it up automatically, **or**
-2. Use direct audio URLs with `!play <URL>` (e.g., from archive.org), which never hit the block.
-
----
-
-## Testing
-
-```bash
-python3 -m unittest discover tests     # 29 unit tests (no Clubhouse account needed)
-python3 main.py --demo                 # full pipeline locally
-```
-
-The demo mode exercises the whole pipeline: chat parsing → queue → download → convert → stream → TTS → skip voting → silence timer → Auto DJ.
-
----
-
-## Project structure
-
-```
-main.py                      # entry point; wires everything together
-auth_setup.py                # one-time Clubhouse authentication helper
-config.json                  # all settings
-bot/
-  clubhouse_client.py        # Clubhouse API (login, join room, PubNub chat)
-  audio_player.py            # yt-dlp → ffmpeg → Agora/local PCM streaming
-  queue_manager.py           # song queue + Auto DJ fallback
-  announcer.py               # gTTS / pyttsx3 announcements
-  command_handler.py         # chat command parsing and dispatch
-  scheduler.py               # APScheduler silence countdown
-  silence_detector.py        # RMS-based silence detection
-playlist/default_songs.txt   # Auto DJ song list
-systemd/clubdj.service       # systemd unit (auto-start on boot)
-install.sh / start.sh        # setup + management scripts
-tests/                       # unit + end-to-end tests
-```
-
----
-
-## Troubleshooting
-
-| Problem | Fix |
+| Command | Description |
 |---|---|
-| "Could not obtain audio for …" | Run `./install.sh` (yt-dlp/ffmpeg missing); or YouTube bot-block → use `cookies.txt` / direct URLs |
-| "Clubhouse API unreachable" | Check `phone_number` and network; the Clubhouse API may be temporarily down |
-| Auth token expired | Re-run `python3 auth_setup.py` |
-| TTS errors on headless Linux | `sudo apt install espeak-ng` (fallback engine for pyttsx3) |
-| No sound in room | Verify the room handshake returned an `agora_channel` (check logs after join) |
+| `!play <song>` | Search and queue a song |
+| `!skip` | Vote to skip the current track |
+| `!queue` | View the current song list |
+| `!np` | Show "Now Playing" information |
+| `!help` | List all available commands |
 
-## License
+---
 
-MIT
+## <a name="structure"></a>## Project Structure
+
+```text
+.
+├── bot/                   # Core logic modules
+│   ├── clubhouse_client.py # API & PubNub integration
+│   ├── audio_player.py     # Download & Stream engine
+│   ├── queue_manager.py    # Playlist & Auto DJ logic
+│   └── announcer.py        # TTS implementation
+├── docs/                  # Platform-specific guides
+├── playlist/              # Default tracks & caches
+├── tests/                 # Unit & E2E test suites
+├── main.py                # Entry point
+├── auth_setup.py          # Auth helper script
+├── install.sh             # Linux/macOS installer
+└── install_termux.sh      # Android/Termux installer
+```
+
+---
+
+## <a name="features"></a>## Features & Roadmap
+
+### Current Features
+- [x] Full Clubhouse API integration
+- [x] Real-time chat command parsing
+- [x] High-performance audio streaming
+- [x] Multi-platform hosting (Cloud/Mobile/PC)
+- [x] Automatic silence recovery
+
+### Roadmap
+- [ ] Spotify/Apple Music playlist sync
+- [ ] Web dashboard for queue management
+- [ ] Multi-room support from a single instance
+- [ ] Advanced audio filters (Equalizer)
+
+---
+
+## <a name="testing"></a>## Testing
+
+ClubDJ includes a comprehensive test suite covering all core components.
+
+```bash
+# Run all unit tests
+python3 -m unittest discover tests
+
+# Run end-to-end demo test
+python3 tests/test_e2e_demo.py
+```
+
+---
+
+## <a name="deployment"></a>## Deployment
+
+### Render (Cloud)
+1.  Connect your GitHub repo to Render.
+2.  Use the `render.yaml` blueprint.
+3.  Set environment variables: `USER_ID`, `USER_TOKEN`, `DEVICE_ID`.
+4.  See [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md) for details.
+
+### Self-Hosting (Linux)
+Use the provided `systemd/clubdj.service` for production-grade persistence.
+```bash
+sudo cp systemd/clubdj.service /etc/systemd/system/
+sudo systemctl enable clubdj
+sudo systemctl start clubdj
+```
+
+---
+
+## <a name="contributing"></a>## Contributing
+
+Contributions are welcome! Please follow these steps:
+1.  Fork the Project.
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the Branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+
+---
+
+## <a name="security"></a>## Security
+
+Please do not share your `auth_token.json` or environment variables. If you suspect your token has been compromised, log out of the Clubhouse app to invalidate the session.
+
+---
+
+## <a name="license"></a>## License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+## <a name="acknowledgments"></a>## Acknowledgments
+
+*   [clubhouse-py](https://github.com/stypr/clubhouse-py) for the API foundation.
+*   [yt-dlp](https://github.com/yt-dlp/yt-dlp) for the audio engine.
+*   [Agora.io](https://www.agora.io/) for the streaming infrastructure.
+
+---
+
+<p align="center">Built with ❤️ by <a href="https://github.com/vincenzo-afk">vincenzo-afk</a></p>
+
+[Back to Top](#header)
